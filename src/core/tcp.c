@@ -1196,7 +1196,6 @@ void
 tcp_slowtmr(void)
 {
   struct tcp_pcb *pcb, *prev;
-  tcpwnd_size_t eff_wnd;
   u8_t pcb_remove;      /* flag if a PCB should be removed */
   u8_t pcb_reset;       /* flag if a RST should be sent when removing */
   err_t err;
@@ -1297,12 +1296,16 @@ tcp_slowtmr_start:
             pcb->rtime = 0;
 
             /* Reduce congestion window and ssthresh. */
-            eff_wnd = LWIP_MIN(pcb->cwnd, pcb->snd_wnd);
+            /* eff_wnd = LWIP_MIN(pcb->cwnd, pcb->snd_wnd);
             pcb->ssthresh = eff_wnd >> 1;
-            if (pcb->ssthresh < (tcpwnd_size_t)(pcb->mss << 1)) {
+            if (pcb->sssthresh < (tcpwnd_size_t)(pcb->mss << 1)) {
               pcb->ssthresh = (tcpwnd_size_t)(pcb->mss << 1);
-            }
+            } */
+            pcb->ssthresh = pcb->cong_ops->ssthresh(pcb);
             pcb->cwnd = pcb->mss;
+            if (pcb->cong_ops->set_state) {
+              pcb->cong_ops->set_state(pcb, TCP_CA_Loss);
+            }
             LWIP_DEBUGF(TCP_CWND_DEBUG, ("tcp_slowtmr: cwnd %"TCPWNDSIZE_F
                                          " ssthresh %"TCPWNDSIZE_F"\n",
                                          pcb->cwnd, pcb->ssthresh));
@@ -1917,6 +1920,9 @@ tcp_alloc(u8_t prio)
     connection is established. To avoid these complications, we set ssthresh to the
     largest effective cwnd (amount of in-flight data) that the sender can have. */
     pcb->ssthresh = TCP_SND_BUF;
+    pcb->cong_ops = &tcp_ca_reno;
+    if(pcb->cong_ops->init)
+      pcb->cong_ops->init(pcb);
 
 #if LWIP_CALLBACK_API
     pcb->recv = tcp_recv_null;

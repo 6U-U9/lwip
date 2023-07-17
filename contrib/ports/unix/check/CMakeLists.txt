@@ -32,6 +32,7 @@ include(${LWIP_CONTRIB_DIR}/ports/unix/Filelists.cmake)
 include(${LWIP_DIR}/src/Filelists.cmake)
 include(${LWIP_DIR}/test/unit/Filelists.cmake)
 
+list(APPEND LWIP_COMPILER_FLAGS -Wno-format-extra-args)
 add_executable(lwip_unittests ${LWIP_TESTFILES})
 target_include_directories(lwip_unittests PRIVATE ${LWIP_INCLUDE_DIRS})
 target_compile_options(lwip_unittests PRIVATE ${LWIP_COMPILER_FLAGS})

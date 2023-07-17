@@ -52,6 +52,9 @@ set(lwipcore_SRCS
     ${LWIP_DIR}/src/core/altcp_alloc.c
     ${LWIP_DIR}/src/core/altcp_tcp.c
     ${LWIP_DIR}/src/core/tcp.c
+    ${LWIP_DIR}/src/core/tcp_cong.c
+    ${LWIP_DIR}/src/core/tcp_ca_reno.c
+    ${LWIP_DIR}/src/core/tcp_ca_cubic.c
     ${LWIP_DIR}/src/core/tcp_in.c
     ${LWIP_DIR}/src/core/tcp_out.c
     ${LWIP_DIR}/src/core/timeouts.c

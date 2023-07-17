@@ -57,6 +57,32 @@ extern "C" {
 
 /* Functions for interfacing with TCP: */
 
+/* Values for tcpi_state.  */
+enum tcp_ca_state
+{
+  TCP_CA_Open = 0,
+  TCP_CA_Disorder = 1,
+  TCP_CA_CWR = 2,
+  TCP_CA_Recovery = 3,
+  TCP_CA_Loss = 4
+};
+/* Events passed to congestion control interface */
+enum tcp_ca_event {
+	CA_EVENT_TX_START,	/* first transmit when no packets in flight */
+	CA_EVENT_CWND_RESTART,	/* congestion window restart */
+	CA_EVENT_COMPLETE_CWR,	/* end of congestion recovery */
+	CA_EVENT_LOSS,		/* loss timeout */
+	CA_EVENT_ECN_NO_CE,	/* ECT set, but not CE marked */
+	CA_EVENT_ECN_IS_CE	/* received CE marked IP packet */
+};
+#define tcp_in_slow_start(pcb) (pcb->cwnd < pcb->ssthresh)
+
+void tcp_cong_avoid_ai(struct tcp_pcb *pcb, u32_t w, u32_t acked);
+u32_t tcp_reno_slow_start(struct tcp_pcb *pcb, u32_t acked);
+tcpwnd_size_t tcp_reno_ssthresh(struct tcp_pcb *pcb);
+void tcp_reno_cong_avoid(struct tcp_pcb *pcb, u32_t acked);
+u32_t tcp_slow_start(struct tcp_pcb *pcb, u32_t acked);
+
 /* Lower layer interface to TCP: */
 void             tcp_init    (void);  /* Initialize this module. */
 void             tcp_tmr     (void);  /* Must be called every
@@ -251,6 +277,8 @@ struct tcp_seg {
   struct tcp_seg *next;    /* used when putting segments on a queue */
   struct pbuf *p;          /* buffer containing data + TCP header */
   u16_t len;               /* the TCP length of this segment */
+  u32_t snd_time;          /* how many times did this segment send*/
+  u32_t snd_timestamp;     /* the send time of this segment*/
 #if TCP_OVERSIZE_DBGCHECK
   u16_t oversize_left;     /* Extra bytes available at the end of the last
                               pbuf in unsent (used for asserting vs.

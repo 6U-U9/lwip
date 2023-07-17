@@ -37,7 +37,7 @@
             "request": "launch",
             "args": [],
             "stopAtEntry": true,
-            "environment": [],
+            "environment": [{"name": "CK_FORK", "value": "NO"}],
             "externalConsole": false,
             "MIMode": "gdb",
             "preLaunchTask": "Build unit tests",

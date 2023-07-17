@@ -178,6 +178,7 @@ tcp_create_segment(const struct tcp_pcb *pcb, struct pbuf *p, u8_t hdrflags, u32
   seg->p = p;
   LWIP_ASSERT("p->tot_len >= optlen", p->tot_len >= optlen);
   seg->len = p->tot_len - optlen;
+  seg->snd_timestamp = 0;
 #if TCP_OVERSIZE_DBGCHECK
   seg->oversize_left = 0;
 #endif /* TCP_OVERSIZE_DBGCHECK */
@@ -452,6 +453,10 @@ tcp_write(struct tcp_pcb *pcb, const void *arg, u16_t len, u8_t apiflags)
     optlen = LWIP_TCP_OPT_LENGTH_SEGMENT(0, pcb);
   }
 
+  /* new data comes after send idle*/
+  if (pcb->cong_ops->cwnd_event != NULL && pcb->unsent == NULL && pcb->unacked == NULL) {
+    pcb->cong_ops->cwnd_event(pcb, CA_EVENT_TX_START);
+  }
 
   /*
    * TCP segmentation is done in three phases with increasing complexity:
@@ -1381,6 +1386,12 @@ tcp_output(struct tcp_pcb *pcb)
     /* put segment on unacknowledged list if length > 0 */
     if (TCP_TCPLEN(seg) > 0) {
       seg->next = NULL;
+      /* record segment send time for first send */
+      pcb->lsndtime = sys_now();
+      if(seg->snd_time == 0) {
+        seg->snd_timestamp = pcb->lsndtime;
+      }
+      seg->snd_time++;
       /* unacked list is empty? */
       if (pcb->unacked == NULL) {
         pcb->unacked = seg;
@@ -1411,6 +1422,7 @@ tcp_output(struct tcp_pcb *pcb)
     }
     seg = pcb->unsent;
   }
+  pcb->is_cwnd_limited = (wnd == pcb->cwnd) && (pcb->unsent != NULL);
 #if TCP_OVERSIZE
   if (pcb->unsent == NULL) {
     /* last unsent has been removed, reset unsent_oversize */
@@ -1798,17 +1810,17 @@ tcp_rexmit_fast(struct tcp_pcb *pcb)
     if (tcp_rexmit(pcb) == ERR_OK) {
       /* Set ssthresh to half of the minimum of the current
        * cwnd and the advertised window */
-      pcb->ssthresh = LWIP_MIN(pcb->cwnd, pcb->snd_wnd) / 2;
+      /* pcb->ssthresh = LWIP_MIN(pcb->cwnd, pcb->snd_wnd) / 2; */
 
       /* The minimum value for ssthresh should be 2 MSS */
-      if (pcb->ssthresh < (2U * pcb->mss)) {
+      /* if (pcb->ssthresh < (2U * pcb->mss)) {
         LWIP_DEBUGF(TCP_FR_DEBUG,
                     ("tcp_receive: The minimum value for ssthresh %"TCPWNDSIZE_F
                      " should be min 2 mss %"U16_F"...\n",
                      pcb->ssthresh, (u16_t)(2 * pcb->mss)));
         pcb->ssthresh = 2 * pcb->mss;
-      }
-
+      } */
+      pcb->ssthresh = pcb->cong_ops->ssthresh(pcb);
       pcb->cwnd = pcb->ssthresh + 3 * pcb->mss;
       tcp_set_flags(pcb, TF_INFR);
 
@@ -2036,7 +2048,7 @@ tcp_rst(const struct tcp_pcb *pcb, u32_t seqno, u32_t ackno,
         u16_t local_port, u16_t remote_port)
 {
   struct pbuf *p;
-  
+
   p = tcp_rst_common(pcb, seqno, ackno, local_ip, remote_ip, local_port, remote_port);
   if (p != NULL) {
     tcp_output_control_segment(pcb, p, local_ip, remote_ip);

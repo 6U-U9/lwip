@@ -81,6 +81,7 @@ static u32_t seqno, ackno;
 static tcpwnd_size_t recv_acked;
 static u16_t tcplen;
 static u8_t flags;
+static u32_t rtt_ms;
 
 static u8_t recv_flags;
 static struct pbuf *recv_data;
@@ -1125,6 +1126,7 @@ tcp_free_acked_segments(struct tcp_pcb *pcb, struct tcp_seg *seg_list, const cha
 
     pcb->snd_queuelen = (u16_t)(pcb->snd_queuelen - clen);
     recv_acked = (tcpwnd_size_t)(recv_acked + next->len);
+    rtt_ms = LWIP_MIN(next->snd_timestamp-pcb->lacktime, rtt_ms);
     tcp_seg_free(next);
 
     LWIP_DEBUGF(TCP_QLEN_DEBUG, ("%"TCPWNDSIZE_F" (after freeing %s)\n",
@@ -1260,23 +1262,21 @@ tcp_receive(struct tcp_pcb *pcb)
       /* Update the congestion control variables (cwnd and
          ssthresh). */
       if (pcb->state >= ESTABLISHED) {
-        if (pcb->cwnd < pcb->ssthresh) {
+         /* if (pcb->cwnd < pcb->ssthresh) {
           tcpwnd_size_t increase;
-          /* limit to 1 SMSS segment during period following RTO */
           u8_t num_seg = (pcb->flags & TF_RTO) ? 1 : 2;
-          /* RFC 3465, section 2.2 Slow Start */
           increase = LWIP_MIN(acked, (tcpwnd_size_t)(num_seg * pcb->mss));
           TCP_WND_INC(pcb->cwnd, increase);
           LWIP_DEBUGF(TCP_CWND_DEBUG, ("tcp_receive: slow start cwnd %"TCPWNDSIZE_F"\n", pcb->cwnd));
         } else {
-          /* RFC 3465, section 2.1 Congestion Avoidance */
           TCP_WND_INC(pcb->bytes_acked, acked);
           if (pcb->bytes_acked >= pcb->cwnd) {
             pcb->bytes_acked = (tcpwnd_size_t)(pcb->bytes_acked - pcb->cwnd);
             TCP_WND_INC(pcb->cwnd, pcb->mss);
           }
           LWIP_DEBUGF(TCP_CWND_DEBUG, ("tcp_receive: congestion avoidance cwnd %"TCPWNDSIZE_F"\n", pcb->cwnd));
-        }
+        }  */
+        pcb->cong_ops->cong_avoid(pcb, acked);
       }
       LWIP_DEBUGF(TCP_INPUT_DEBUG, ("tcp_receive: ACK for %"U32_F", unacked->seqno %"U32_F":%"U32_F"\n",
                                     ackno,
@@ -1285,6 +1285,8 @@ tcp_receive(struct tcp_pcb *pcb)
                                     pcb->unacked != NULL ?
                                     lwip_ntohl(pcb->unacked->tcphdr->seqno) + TCP_TCPLEN(pcb->unacked) : 0));
 
+      rtt_ms = (u32_t)-1;
+      pcb->lacktime = sys_now();
       /* Remove segment from the unacknowledged list if the incoming
          ACK acknowledges them. */
       pcb->unacked = tcp_free_acked_segments(pcb, pcb->unacked, "unacked", pcb->unsent);
@@ -1296,6 +1298,9 @@ tcp_receive(struct tcp_pcb *pcb)
          in fact have been sent once. */
       pcb->unsent = tcp_free_acked_segments(pcb, pcb->unsent, "unsent", pcb->unacked);
 
+      if (!pcb->cong_ops->pkts_acked) {
+        pcb->cong_ops->pkts_acked(pcb, rtt_ms);
+      }
       /* If there's nothing left to acknowledge, stop the retransmit
          timer, otherwise reset it to start again */
       if (pcb->unacked == NULL) {

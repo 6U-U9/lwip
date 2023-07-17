@@ -525,7 +525,7 @@ START_TEST(test_tcp_fast_retx_recover)
   EXPECT_RET(pcb->dupacks == 3);
   memset(&txcounters, 0, sizeof(txcounters));
   /* @todo: check expected data?*/
-  
+
   /* send data5, not output yet */
   err = tcp_write(pcb, data5, sizeof(data5), TCP_WRITE_FLAG_COPY);
   EXPECT_RET(err == ERR_OK);
@@ -1165,7 +1165,7 @@ START_TEST(test_tcp_rto_tracking)
   EXPECT(pcb->unsent == NULL);
   /* RTO should still be marked */
   EXPECT(pcb->flags & TF_RTO);
-  /* cwnd should have only grown by 1 MSS */
+  /* cwnd should have only grown by 1 MSS , because of RTO*/
   EXPECT(pcb->cwnd == (tcpwnd_size_t)(3 * pcb->mss));
   /* snd_nxt should have been advanced past rto_end */
   EXPECT(TCP_SEQ_GT(pcb->snd_nxt, pcb->rto_end));
@@ -1268,7 +1268,7 @@ static void test_tcp_rto_timeout_impl(int link_down)
   /* check our pcb is no longer active */
   for (cur = tcp_active_pcbs; cur != NULL; cur = cur->next) {
     EXPECT(cur != pcb);
-  }  
+  }
   EXPECT_RET(MEMP_STATS_GET(used, MEMP_TCP_PCB) == 0);
 }
 
@@ -1364,7 +1364,7 @@ static void test_tcp_rto_timeout_syn_sent_impl(int link_down)
   /* check our pcb is no longer active */
   for (cur = tcp_active_pcbs; cur != NULL; cur = cur->next) {
     EXPECT(cur != pcb);
-  }  
+  }
   EXPECT_RET(MEMP_STATS_GET(used, MEMP_TCP_PCB) == 0);
 }
 
@@ -1414,7 +1414,7 @@ static void test_tcp_zwp_timeout_impl(int link_down)
   EXPECT(err == ERR_OK);
   err = tcp_output(pcb);
   EXPECT(err == ERR_OK);
-  
+
   /* verify segment is in-flight */
   EXPECT(pcb->unsent == NULL);
   check_seqnos(pcb->unacked, 1, seqnos);
@@ -1493,7 +1493,7 @@ static void test_tcp_zwp_timeout_impl(int link_down)
   /* check our pcb is no longer active */
   for (cur = tcp_active_pcbs; cur != NULL; cur = cur->next) {
     EXPECT(cur != pcb);
-  }  
+  }
   EXPECT_RET(MEMP_STATS_GET(used, MEMP_TCP_PCB) == 0);
 }
 

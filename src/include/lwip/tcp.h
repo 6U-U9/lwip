@@ -50,6 +50,7 @@
 #include "lwip/err.h"
 #include "lwip/ip6.h"
 #include "lwip/ip6_addr.h"
+#include "lwip/timeouts.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -189,6 +190,30 @@ struct tcp_ext_arg_callbacks {
   tcp_extarg_callback_passive_open_fn passive_open;
 };
 
+#define TCP_CA_NAME_MAX 20
+struct tcp_congestion_ops {
+	/* return slow start threshold (required) */
+	tcpwnd_size_t (*ssthresh)(struct tcp_pcb *pcb);
+
+	/* do new cwnd calculation (required) */
+	void (*cong_avoid)(struct tcp_pcb *pcb, u32_t acked);
+
+	/* call before changing ca_state (optional) */
+	void (*set_state)(struct tcp_pcb *pcb, u8_t new_state);
+
+	/* call when cwnd event occurs (optional) */
+	 void (*cwnd_event)(struct tcp_pcb *pcb, u8_t event);
+
+  /* hook for packet ack accounting (optional) */
+  void (*pkts_acked)(struct tcp_pcb *pcb, u32_t rtt);
+
+	char name[TCP_CA_NAME_MAX];
+
+	/* initialize private data */
+	void (*init)(struct tcp_pcb *pcb);
+};
+extern struct tcp_congestion_ops tcp_ca_reno;
+
 #define LWIP_TCP_PCB_NUM_EXT_ARG_ID_INVALID 0xFF
 
 #if LWIP_TCP_PCB_NUM_EXT_ARGS
@@ -309,6 +334,11 @@ struct tcp_pcb {
   u32_t lastack; /* Highest acknowledged seqno. */
 
   /* congestion avoidance/control variables */
+  u32_t is_cwnd_limited;
+  u32_t lsndtime; /* last segment send timestamp in ms*/
+  u32_t lacktime; /* last segment ack timestamp in ms*/
+  struct tcp_congestion_ops *cong_ops;
+  u32_t tcp_congestion_priv[100];
   tcpwnd_size_t cwnd;
   tcpwnd_size_t ssthresh;
 
