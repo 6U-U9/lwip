@@ -213,6 +213,7 @@ struct tcp_congestion_ops {
 	void (*init)(struct tcp_pcb *pcb);
 };
 extern struct tcp_congestion_ops tcp_ca_reno;
+extern struct tcp_congestion_ops tcp_ca_cubic;
 
 #define LWIP_TCP_PCB_NUM_EXT_ARG_ID_INVALID 0xFF
 

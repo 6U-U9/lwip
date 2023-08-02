@@ -1169,6 +1169,9 @@ tcp_connect(struct tcp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port,
   LWIP_UNUSED_ARG(connected);
 #endif /* LWIP_CALLBACK_API */
 
+  if(pcb->cong_ops->init != NULL)
+    pcb->cong_ops->init(pcb);
+
   /* Send a SYN together with the MSS option. */
   ret = tcp_enqueue_flags(pcb, TCP_SYN);
   if (ret == ERR_OK) {
@@ -1303,7 +1306,7 @@ tcp_slowtmr_start:
             } */
             pcb->ssthresh = pcb->cong_ops->ssthresh(pcb);
             pcb->cwnd = pcb->mss;
-            if (pcb->cong_ops->set_state) {
+            if (pcb->cong_ops->set_state != NULL) {
               pcb->cong_ops->set_state(pcb, TCP_CA_Loss);
             }
             LWIP_DEBUGF(TCP_CWND_DEBUG, ("tcp_slowtmr: cwnd %"TCPWNDSIZE_F
@@ -1920,9 +1923,7 @@ tcp_alloc(u8_t prio)
     connection is established. To avoid these complications, we set ssthresh to the
     largest effective cwnd (amount of in-flight data) that the sender can have. */
     pcb->ssthresh = TCP_SND_BUF;
-    pcb->cong_ops = &tcp_ca_reno;
-    if(pcb->cong_ops->init)
-      pcb->cong_ops->init(pcb);
+    pcb->cong_ops = &tcp_ca_cubic;
 
 #if LWIP_CALLBACK_API
     pcb->recv = tcp_recv_null;

@@ -26,7 +26,7 @@ static u32_t tcp_friendliness = 1;
 static u32_t hystart = 1;
 static u32_t hystart_detect = HYSTART_ACK_TRAIN | HYSTART_DELAY;
 static u32_t hystart_low_window = 16;
-static u32_t hystart_ack_delta_ms = 2000;
+static u32_t hystart_ack_delta_ms = 2;
 
 static u32_t cube_rtt_scale;
 static u32_t beta_scale;
@@ -299,7 +299,7 @@ static u32_t tcp_cubic_slow_start(struct tcp_pcb *pcb, u32_t acked)
 
 	acked -= delta;
 
-	TCP_WND_INC(pcb->cwnd, acked);
+	TCP_WND_INC(pcb->cwnd, delta);
   LWIP_DEBUGF(TCP_CWND_DEBUG, ("tcp_receive: slow start cwnd %"TCPWNDSIZE_F"\n", pcb->cwnd));
 
 	return acked;

@@ -178,6 +178,7 @@ tcp_create_segment(const struct tcp_pcb *pcb, struct pbuf *p, u8_t hdrflags, u32
   seg->p = p;
   LWIP_ASSERT("p->tot_len >= optlen", p->tot_len >= optlen);
   seg->len = p->tot_len - optlen;
+  seg->snd_time = 0;
   seg->snd_timestamp = 0;
 #if TCP_OVERSIZE_DBGCHECK
   seg->oversize_left = 0;
@@ -1422,7 +1423,7 @@ tcp_output(struct tcp_pcb *pcb)
     }
     seg = pcb->unsent;
   }
-  pcb->is_cwnd_limited = (wnd == pcb->cwnd) && (pcb->unsent != NULL);
+
 #if TCP_OVERSIZE
   if (pcb->unsent == NULL) {
     /* last unsent has been removed, reset unsent_oversize */
@@ -1431,6 +1432,7 @@ tcp_output(struct tcp_pcb *pcb)
 #endif /* TCP_OVERSIZE */
 
 output_done:
+  pcb->is_cwnd_limited = (wnd == pcb->cwnd) && (pcb->unsent != NULL);
   tcp_clear_flags(pcb, TF_NAGLEMEMERR);
   return ERR_OK;
 }

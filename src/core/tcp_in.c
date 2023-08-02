@@ -712,6 +712,9 @@ tcp_listen_input(struct tcp_pcb_listen *pcb)
 
     MIB2_STATS_INC(mib2.tcppassiveopens);
 
+    if(npcb->cong_ops->init != NULL)
+      npcb->cong_ops->init(npcb);
+
 #if LWIP_TCP_PCB_NUM_EXT_ARGS
     if (tcp_ext_arg_invoke_callbacks_passive_open(pcb, npcb) != ERR_OK) {
       tcp_abandon(npcb, 0);
@@ -1126,7 +1129,7 @@ tcp_free_acked_segments(struct tcp_pcb *pcb, struct tcp_seg *seg_list, const cha
 
     pcb->snd_queuelen = (u16_t)(pcb->snd_queuelen - clen);
     recv_acked = (tcpwnd_size_t)(recv_acked + next->len);
-    rtt_ms = LWIP_MIN(next->snd_timestamp-pcb->lacktime, rtt_ms);
+    rtt_ms = LWIP_MIN(pcb->lacktime - next->snd_timestamp, rtt_ms);
     tcp_seg_free(next);
 
     LWIP_DEBUGF(TCP_QLEN_DEBUG, ("%"TCPWNDSIZE_F" (after freeing %s)\n",
@@ -1298,7 +1301,7 @@ tcp_receive(struct tcp_pcb *pcb)
          in fact have been sent once. */
       pcb->unsent = tcp_free_acked_segments(pcb, pcb->unsent, "unsent", pcb->unacked);
 
-      if (!pcb->cong_ops->pkts_acked) {
+      if (pcb->cong_ops->pkts_acked != NULL) {
         pcb->cong_ops->pkts_acked(pcb, rtt_ms);
       }
       /* If there's nothing left to acknowledge, stop the retransmit

@@ -24,6 +24,8 @@
 #include "lwip/tcpip.h"
 #endif
 
+#define LWIP_UNITTESTS_NOFORK
+
 /* This function is used for LWIP_RAND by some ports... */
 unsigned int
 lwip_port_rand(void)
