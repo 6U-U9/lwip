@@ -17,22 +17,21 @@
 #error "This tests needs TCP_SND_BUF to be > TCP_WND"
 #endif
 
-struct bictcp {
+struct cubictcp {
 	u32_t	cnt;		/* increase cwnd by 1 after ACKs */
 	u32_t	last_max_cwnd;	/* last maximum snd_cwnd */
 	u32_t	last_cwnd;	/* the last snd_cwnd */
 	u32_t	last_time;	/* time when updated last_cwnd */
-	u32_t	bic_origin_point;/* origin point of bic function */
-	u32_t	bic_K;		/* time to origin point
+	u32_t	cubic_origin_point;/* origin point of bic function */
+	u32_t	cubic_K;		/* time to origin point
 				   from the beginning of the current epoch */
 	u32_t	delay_min;	/* min delay (msec) */
 	u32_t	epoch_start;	/* beginning of an epoch */
 	u32_t	ack_cnt;	/* number of acks */
 	u32_t	tcp_cwnd;	/* estimated tcp cwnd */
-	u32_t mss;
+	u16_t mss;
 
   /* for hystart*/
-	u16_t	unused;
 	u8_t	sample_cnt;	/* number of samples to decide curr_rtt */
 	u8_t	found;		/* the exit point is found? */
 	u32_t	round_start;	/* beginning of each round */
@@ -1707,7 +1706,7 @@ START_TEST(test_tcp_ca_cubic_slowstart)
   struct test_tcp_counters counters;
   struct tcp_pcb* pcb;
   struct pbuf* p;
-  struct bictcp* ca;
+  struct cubictcp* ca;
   err_t err;
   size_t i;
   LWIP_UNUSED_ARG(_i);
@@ -1725,7 +1724,7 @@ START_TEST(test_tcp_ca_cubic_slowstart)
   pcb = test_tcp_new_counters_pcb(&counters);
   EXPECT_RET(pcb != NULL);
   tcp_set_state(pcb, ESTABLISHED, &test_local_ip, &test_remote_ip, TEST_LOCAL_PORT, TEST_REMOTE_PORT);
-  ca = (struct bictcp*) pcb->tcp_congestion_priv;
+  ca = (struct cubictcp*) pcb->tcp_congestion_priv;
   if(pcb->cong_ops->init != NULL)
     pcb->cong_ops->init(pcb);
   pcb->mss = TCP_MSS;
@@ -1811,7 +1810,7 @@ START_TEST(test_tcp_ca_cubic_slowstart)
   EXPECT(ca->epoch_start == lwip_sys_now);
   EXPECT(ca->delay_min == 800);
   EXPECT(ca->ack_cnt == pcb->mss);
-  EXPECT(ca->bic_origin_point == 3);
+  EXPECT(ca->cubic_origin_point == 3);
 
   /* make sure the pcb is freed */
   EXPECT_RET(MEMP_STATS_GET(used, MEMP_TCP_PCB) == 1);
@@ -1827,7 +1826,7 @@ START_TEST(test_tcp_ca_cubic_hystart_ack_train)
   struct test_tcp_counters counters;
   struct tcp_pcb* pcb;
   struct pbuf* p;
-  struct bictcp* ca;
+  struct cubictcp* ca;
   u32_t	test_round_start;
   u32_t	test_send_seq;
   err_t err;
@@ -1847,7 +1846,7 @@ START_TEST(test_tcp_ca_cubic_hystart_ack_train)
   pcb = test_tcp_new_counters_pcb(&counters);
   EXPECT_RET(pcb != NULL);
   tcp_set_state(pcb, ESTABLISHED, &test_local_ip, &test_remote_ip, TEST_LOCAL_PORT, TEST_REMOTE_PORT);
-  ca = (struct bictcp*) pcb->tcp_congestion_priv;
+  ca = (struct cubictcp*) pcb->tcp_congestion_priv;
   if(pcb->cong_ops->init != NULL)
     pcb->cong_ops->init(pcb);
   pcb->mss = TCP_MSS;
@@ -1929,7 +1928,7 @@ START_TEST(test_tcp_ca_cubic_hystart_delay)
   struct test_tcp_counters counters;
   struct tcp_pcb* pcb;
   struct pbuf* p;
-  struct bictcp* ca;
+  struct cubictcp* ca;
   u32_t	test_round_start;
   u32_t	test_send_seq;
   err_t err;
@@ -1949,7 +1948,7 @@ START_TEST(test_tcp_ca_cubic_hystart_delay)
   pcb = test_tcp_new_counters_pcb(&counters);
   EXPECT_RET(pcb != NULL);
   tcp_set_state(pcb, ESTABLISHED, &test_local_ip, &test_remote_ip, TEST_LOCAL_PORT, TEST_REMOTE_PORT);
-  ca = (struct bictcp*) pcb->tcp_congestion_priv;
+  ca = (struct cubictcp*) pcb->tcp_congestion_priv;
   if(pcb->cong_ops->init != NULL)
     pcb->cong_ops->init(pcb);
   pcb->mss = TCP_MSS;
@@ -2033,7 +2032,7 @@ START_TEST(test_tcp_ca_cubic)
   struct test_tcp_counters counters;
   struct tcp_pcb* pcb;
   struct pbuf* p;
-  struct bictcp* ca;
+  struct cubictcp* ca;
   u32_t test_epoch_start;
   err_t err;
   size_t i;
@@ -2052,7 +2051,7 @@ START_TEST(test_tcp_ca_cubic)
   pcb = test_tcp_new_counters_pcb(&counters);
   EXPECT_RET(pcb != NULL);
   tcp_set_state(pcb, ESTABLISHED, &test_local_ip, &test_remote_ip, TEST_LOCAL_PORT, TEST_REMOTE_PORT);
-  ca = (struct bictcp*) pcb->tcp_congestion_priv;
+  ca = (struct cubictcp*) pcb->tcp_congestion_priv;
   if(pcb->cong_ops->init != NULL)
     pcb->cong_ops->init(pcb);
   pcb->mss = TCP_MSS;
@@ -2098,8 +2097,8 @@ START_TEST(test_tcp_ca_cubic)
   EXPECT(ca->epoch_start == lwip_sys_now);
   EXPECT(ca->ack_cnt == 1 * TCP_MSS);
   EXPECT(ca->tcp_cwnd == 10);
-  EXPECT(ca->bic_K == 0);
-  EXPECT(ca->bic_origin_point == 10);
+  EXPECT(ca->cubic_K == 0);
+  EXPECT(ca->cubic_origin_point == 10);
   /* initial growth set to 5% */
   EXPECT(ca->cnt == 20);
   /* no change in cwnd */
@@ -2115,8 +2114,8 @@ START_TEST(test_tcp_ca_cubic)
   EXPECT(ca->epoch_start == test_epoch_start);
   EXPECT(ca->ack_cnt == 2 * TCP_MSS);
   EXPECT(ca->tcp_cwnd == 10);
-  EXPECT(ca->bic_K == 0);
-  EXPECT(ca->bic_origin_point == 10);
+  EXPECT(ca->cubic_K == 0);
+  EXPECT(ca->cubic_origin_point == 10);
   /* initial growth set to 5% */
   EXPECT(ca->cnt == 20);
   /* no change in cwnd */
@@ -2131,8 +2130,8 @@ START_TEST(test_tcp_ca_cubic)
   EXPECT(ca->epoch_start == test_epoch_start);
   EXPECT(ca->ack_cnt == 3 * TCP_MSS);
   EXPECT(ca->tcp_cwnd == 10);
-  EXPECT(ca->bic_K == 0);
-  EXPECT(ca->bic_origin_point == 10);
+  EXPECT(ca->cubic_K == 0);
+  EXPECT(ca->cubic_origin_point == 10);
   /* calculated raise count */
   EXPECT(ca->cnt == 3);
   /* cwnd plus 1*/
@@ -2154,8 +2153,8 @@ START_TEST(test_tcp_ca_cubic)
   EXPECT(ca->epoch_start == test_epoch_start);
   EXPECT(ca->ack_cnt == 3 * TCP_MSS);
   EXPECT(ca->tcp_cwnd == 10);
-  EXPECT(ca->bic_K == 0);
-  EXPECT(ca->bic_origin_point == 10);
+  EXPECT(ca->cubic_K == 0);
+  EXPECT(ca->cubic_origin_point == 10);
   EXPECT(ca->cnt == 3);
 
   /* 3 duplicated ACK*/
@@ -2177,9 +2176,9 @@ START_TEST(test_tcp_ca_cubic)
   EXPECT(ca->epoch_start == lwip_sys_now);
   EXPECT(ca->ack_cnt == 1 * TCP_MSS);
   EXPECT(ca->tcp_cwnd == 7);
-  EXPECT(ca->bic_K >= 2200);
-  EXPECT(ca->bic_K <= 2210);
-  EXPECT(ca->bic_origin_point == 11);
+  EXPECT(ca->cubic_K >= 2200);
+  EXPECT(ca->cubic_K <= 2210);
+  EXPECT(ca->cubic_origin_point == 11);
   EXPECT(ca->cnt == 7);
   /* cwnd set to ssthresh*/
   EXPECT(pcb->bytes_acked == 1 * TCP_MSS);
@@ -2194,9 +2193,9 @@ START_TEST(test_tcp_ca_cubic)
   EXPECT(ca->epoch_start == test_epoch_start);
   EXPECT(ca->ack_cnt == 2 * TCP_MSS);
   EXPECT(ca->tcp_cwnd == 7);
-  EXPECT(ca->bic_K >= 2200);
-  EXPECT(ca->bic_K <= 2210);
-  EXPECT(ca->bic_origin_point == 11);
+  EXPECT(ca->cubic_K >= 2200);
+  EXPECT(ca->cubic_K <= 2210);
+  EXPECT(ca->cubic_origin_point == 11);
   /* calculated raise count */
   EXPECT(ca->cnt == 2);
   /* cwnd plus 1*/
@@ -2238,7 +2237,7 @@ START_TEST(test_tcp_ca_cubic_rto)
   struct test_tcp_counters counters;
   struct tcp_pcb* pcb;
   struct pbuf* p;
-  struct bictcp* ca;
+  struct cubictcp* ca;
   u32_t test_epoch_start;
   err_t err;
   size_t i;
@@ -2257,7 +2256,7 @@ START_TEST(test_tcp_ca_cubic_rto)
   pcb = test_tcp_new_counters_pcb(&counters);
   EXPECT_RET(pcb != NULL);
   tcp_set_state(pcb, ESTABLISHED, &test_local_ip, &test_remote_ip, TEST_LOCAL_PORT, TEST_REMOTE_PORT);
-  ca = (struct bictcp*) pcb->tcp_congestion_priv;
+  ca = (struct cubictcp*) pcb->tcp_congestion_priv;
   if(pcb->cong_ops->init != NULL)
     pcb->cong_ops->init(pcb);
   pcb->mss = TCP_MSS;
@@ -2303,8 +2302,8 @@ START_TEST(test_tcp_ca_cubic_rto)
   EXPECT(ca->epoch_start == lwip_sys_now);
   EXPECT(ca->ack_cnt == 1 * TCP_MSS);
   EXPECT(ca->tcp_cwnd == 10);
-  EXPECT(ca->bic_K == 0);
-  EXPECT(ca->bic_origin_point == 10);
+  EXPECT(ca->cubic_K == 0);
+  EXPECT(ca->cubic_origin_point == 10);
   /* initial growth set to 5% */
   EXPECT(ca->cnt == 20);
   /* no change in cwnd */
@@ -2320,8 +2319,8 @@ START_TEST(test_tcp_ca_cubic_rto)
   EXPECT(ca->epoch_start == test_epoch_start);
   EXPECT(ca->ack_cnt == 2 * TCP_MSS);
   EXPECT(ca->tcp_cwnd == 10);
-  EXPECT(ca->bic_K == 0);
-  EXPECT(ca->bic_origin_point == 10);
+  EXPECT(ca->cubic_K == 0);
+  EXPECT(ca->cubic_origin_point == 10);
   /* initial growth set to 5% */
   EXPECT(ca->cnt == 20);
   /* no change in cwnd */
@@ -2336,8 +2335,8 @@ START_TEST(test_tcp_ca_cubic_rto)
   EXPECT(ca->epoch_start == test_epoch_start);
   EXPECT(ca->ack_cnt == 3 * TCP_MSS);
   EXPECT(ca->tcp_cwnd == 10);
-  EXPECT(ca->bic_K == 0);
-  EXPECT(ca->bic_origin_point == 10);
+  EXPECT(ca->cubic_K == 0);
+  EXPECT(ca->cubic_origin_point == 10);
   /* calculated raise count */
   EXPECT(ca->cnt == 3);
   /* cwnd plus 1*/
@@ -2353,8 +2352,8 @@ START_TEST(test_tcp_ca_cubic_rto)
   EXPECT(ca->epoch_start == 0);
   EXPECT(ca->ack_cnt == 0);
   EXPECT(ca->tcp_cwnd == 0);
-  EXPECT(ca->bic_K == 0);
-  EXPECT(ca->bic_origin_point == 0);
+  EXPECT(ca->cubic_K == 0);
+  EXPECT(ca->cubic_origin_point == 0);
   EXPECT(ca->cnt == 0);
   EXPECT(ca->delay_min == 0);
   /* cwnd plus 1*/
@@ -2376,7 +2375,7 @@ START_TEST(test_tcp_ca_cubic_tcp_friendliness)
   struct test_tcp_counters counters;
   struct tcp_pcb* pcb;
   struct pbuf* p;
-  struct bictcp* ca;
+  struct cubictcp* ca;
   u32_t test_epoch_start;
   err_t err;
   size_t i;
@@ -2395,7 +2394,7 @@ START_TEST(test_tcp_ca_cubic_tcp_friendliness)
   pcb = test_tcp_new_counters_pcb(&counters);
   EXPECT_RET(pcb != NULL);
   tcp_set_state(pcb, ESTABLISHED, &test_local_ip, &test_remote_ip, TEST_LOCAL_PORT, TEST_REMOTE_PORT);
-  ca = (struct bictcp*) pcb->tcp_congestion_priv;
+  ca = (struct cubictcp*) pcb->tcp_congestion_priv;
   if(pcb->cong_ops->init != NULL)
     pcb->cong_ops->init(pcb);
   pcb->mss = TCP_MSS;
@@ -2442,8 +2441,8 @@ START_TEST(test_tcp_ca_cubic_tcp_friendliness)
   EXPECT(ca->epoch_start == lwip_sys_now);
   EXPECT(ca->ack_cnt == 1 * TCP_MSS);
   EXPECT(ca->tcp_cwnd == 4);
-  EXPECT(ca->bic_K == 0);
-  EXPECT(ca->bic_origin_point == 4);
+  EXPECT(ca->cubic_K == 0);
+  EXPECT(ca->cubic_origin_point == 4);
   /* initial growth set to 5% */
   EXPECT(ca->cnt == 20);
   /* no change in cwnd */
@@ -2460,8 +2459,8 @@ START_TEST(test_tcp_ca_cubic_tcp_friendliness)
     EXPECT(ca->epoch_start == test_epoch_start);
     EXPECT(ca->ack_cnt == (i+2) * TCP_MSS);
     EXPECT(ca->tcp_cwnd == 4);
-    EXPECT(ca->bic_K == 0);
-    EXPECT(ca->bic_origin_point == 4);
+    EXPECT(ca->cubic_K == 0);
+    EXPECT(ca->cubic_origin_point == 4);
     EXPECT(ca->cnt == 20);
     EXPECT(pcb->bytes_acked == (i+2) * TCP_MSS);
     EXPECT(pcb->cwnd == 4 * TCP_MSS);
@@ -2475,8 +2474,8 @@ START_TEST(test_tcp_ca_cubic_tcp_friendliness)
   EXPECT(ca->epoch_start == test_epoch_start);
   EXPECT(ca->ack_cnt == 1 * TCP_MSS);
   EXPECT(ca->tcp_cwnd == 5);
-  EXPECT(ca->bic_K == 0);
-  EXPECT(ca->bic_origin_point == 4);
+  EXPECT(ca->cubic_K == 0);
+  EXPECT(ca->cubic_origin_point == 4);
   /* calculated raise count */
   EXPECT(ca->cnt == 4);
   /* cwnd plus 1*/

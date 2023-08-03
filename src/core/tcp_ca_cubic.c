@@ -2,11 +2,11 @@
 #include "lwip/priv/tcp_priv.h"
 #include <string.h>
 
-#define BICTCP_BETA_SCALE    1024	/* Scale factor beta calculation
+#define CUBICTCP_BETA_SCALE    1024	/* Scale factor beta calculation
 					 * max_cwnd = snd_cwnd * beta
 					 */
 #define HZ 1000 /* sys_now() time unit, ms */
-#define	BICTCP_HZ		10	/* BIC HZ 2^10 = 1024 */
+#define	CUBICTCP_HZ		10	/* BIC HZ 2^10 = 1024 */
 
 /* Two methods of hybrid slow start */
 #define HYSTART_ACK_TRAIN	0x1
@@ -20,7 +20,7 @@
 
 static u32_t fast_convergence = 1;
 static u32_t beta = 717;	/* = 717/1024 (BICTCP_BETA_SCALE) */
-static u32_t bic_scale = 41;
+static u32_t cubic_scale = 41;
 static u32_t tcp_friendliness = 1;
 
 static u32_t hystart = 1;
@@ -33,23 +33,22 @@ static u32_t beta_scale;
 static u64_t cube_factor;
 
 
-/* BIC TCP Parameters */
-struct bictcp {
-	u32_t	cnt;		/* increase cwnd by 1 after ACKs */
-	u32_t	last_max_cwnd;	/* last maximum snd_cwnd */
-	u32_t	last_cwnd;	/* the last snd_cwnd */
+/* CUBIC TCP Parameters */
+struct cubictcp {
+	u32_t	cnt;		/* increase cwnd by 1 after ACKs (packet)*/
+	u32_t	last_max_cwnd;	/* last maximum snd_cwnd (packet)*/
+	u32_t	last_cwnd;	/* the last snd_cwnd (packet)*/
 	u32_t	last_time;	/* time when updated last_cwnd */
-	u32_t	bic_origin_point;/* origin point of bic function */
-	u32_t	bic_K;		/* time to origin point
+	u32_t	cubic_origin_point;/* origin point of bic function */
+	u32_t	cubic_K;		/* time to origin point
 				   from the beginning of the current epoch */
 	u32_t	delay_min;	/* min delay (msec) */
 	u32_t	epoch_start;	/* beginning of an epoch */
-	u32_t	ack_cnt;	/* number of acks */
-	u32_t	tcp_cwnd;	/* estimated tcp cwnd */
-	u32_t mss;
+	u32_t	ack_cnt;	/* number of acks (byte) */
+	u32_t	tcp_cwnd;	/* estimated tcp cwnd (packet)*/
+	u16_t mss;
 
   /* for hystart*/
-	u16_t	unused;
 	u8_t	sample_cnt;	/* number of samples to decide curr_rtt */
 	u8_t	found;		/* the exit point is found? */
 	u32_t	round_start;	/* beginning of each round */
@@ -58,15 +57,15 @@ struct bictcp {
 	u32_t	curr_rtt;	/* the minimum rtt of current round */
 };
 
-static inline void bictcp_reset(struct bictcp *ca)
+static inline void cubictcp_reset(struct cubictcp *ca)
 {
-	memset(ca, 0, offsetof(struct bictcp, unused));
+	memset(ca, 0, offsetof(struct cubictcp, mss));
 	ca->found = 0;
 }
 
-static inline void bictcp_hystart_reset(struct tcp_pcb *pcb)
+static inline void cubictcp_hystart_reset(struct tcp_pcb *pcb)
 {
-	struct bictcp *ca = (struct bictcp *)pcb->tcp_congestion_priv;
+	struct cubictcp *ca = (struct cubictcp *)pcb->tcp_congestion_priv;
 
 	ca->round_start = ca->last_ack = pcb->lacktime;
 	ca->end_seq = pcb->snd_nxt;
@@ -76,37 +75,45 @@ static inline void bictcp_hystart_reset(struct tcp_pcb *pcb)
 
 static void tcp_cubic_init(struct tcp_pcb *pcb)
 {
-  struct bictcp *ca = (struct bictcp *)pcb->tcp_congestion_priv;
+  struct cubictcp *ca = (struct cubictcp *)pcb->tcp_congestion_priv;
 
-	bictcp_reset(ca);
+	cubictcp_reset(ca);
 
-	cube_rtt_scale = bic_scale * 10;
-	beta_scale = 8*(BICTCP_BETA_SCALE+beta) / 3 / (BICTCP_BETA_SCALE - beta);
-	cube_factor = (((u64_t)1) << (10+3*BICTCP_HZ)) / cube_rtt_scale;
+	cube_rtt_scale = cubic_scale * 10;
+	beta_scale = 8*(CUBICTCP_BETA_SCALE+beta) / 3 / (CUBICTCP_BETA_SCALE - beta);
+	cube_factor = (((u64_t)1) << (10+3*CUBICTCP_HZ)) / cube_rtt_scale;
 
   if (hystart)
-		bictcp_hystart_reset(pcb);
+		cubictcp_hystart_reset(pcb);
 
 }
 
 static void tcp_cubic_cwnd_event(struct tcp_pcb *pcb, u8_t event)
 {
-	if (event == CA_EVENT_TX_START) {
-		struct bictcp *ca = (struct bictcp *)pcb->tcp_congestion_priv;
-		u32_t now = sys_now();
-		s32_t delta;
+	struct cubictcp *ca = (struct cubictcp *)pcb->tcp_congestion_priv;
+	u32_t now;
+	s32_t delta;
 
-		delta = now - pcb->lsndtime;
+	switch (event) {
+		case CA_EVENT_TX_START:
+			now = sys_now();
+			delta = now - pcb->lsndtime;
 
-		/* We were application limited (idle) for a while.
-		 * Shift epoch_start to keep cwnd growth to cubic curve.
-		 */
-		if (ca->epoch_start && delta > 0) {
-			ca->epoch_start += delta;
-			if (TCP_SEQ_GT(ca->epoch_start, now))
-				ca->epoch_start = now;
-		}
-		return;
+			/* We were application limited (idle) for a while.
+			* Shift epoch_start to keep cwnd growth to cubic curve.
+			*/
+			if (ca->epoch_start && delta > 0) {
+				ca->epoch_start += delta;
+				if (TCP_SEQ_GT(ca->epoch_start, now))
+					ca->epoch_start = now;
+			}
+			return;
+		case CA_EVENT_LOSS:
+			cubictcp_reset((struct cubictcp *)pcb->tcp_congestion_priv);
+			cubictcp_hystart_reset(pcb);
+			return;
+		default:
+			return;
 	}
 }
 
@@ -182,43 +189,44 @@ static u32_t cubic_root(u64_t a)
 	return x;
 }
 
-static inline void tcp_cubic_update(struct bictcp *ca, u32_t cwnd, u32_t acked)
+static inline void tcp_cubic_update(struct cubictcp *ca, u32_t cwnd, u32_t acked)
 {
-	u32_t delta, bic_target, max_cnt;
+	u32_t delta, cubic_target, max_cnt, now;
 	u64_t offs, t;
 
-	ca->ack_cnt += acked;	/* count the number of ACKed packets */
+	ca->ack_cnt += acked;	/* count of ACKed bytes */
   cwnd /= ca->mss; /* convert cwnd in byte to cwnd in segment*/
+	now = sys_now();
 
 	if (ca->last_cwnd == cwnd &&
-	    (s32_t)(sys_now() - ca->last_time) <= HZ / 32)
+	    (s32_t)(now - ca->last_time) <= HZ / 32)
 		return;
 
 	/* The CUBIC function can update ca->cnt at most once per jiffy.
 	 * On all cwnd reduction events, ca->epoch_start is set to 0,
 	 * which will force a recalculation of ca->cnt.
 	 */
-	if (ca->epoch_start && sys_now() == ca->last_time)
+	if (ca->epoch_start && now == ca->last_time)
 		goto tcp_friendliness;
 
 	ca->last_cwnd = cwnd;
-	ca->last_time = sys_now();
+	ca->last_time = now;
 
 	if (ca->epoch_start == 0) {
-		ca->epoch_start = sys_now();	/* record beginning */
+		ca->epoch_start = now;	/* record beginning */
 		ca->ack_cnt = acked;			/* start counting */
 		ca->tcp_cwnd = cwnd;			/* syn with cubic */
 
 		if (ca->last_max_cwnd <= cwnd) {
-			ca->bic_K = 0;
-			ca->bic_origin_point = cwnd;
+			ca->cubic_K = 0;
+			ca->cubic_origin_point = cwnd;
 		} else {
 			/* Compute new K based on
 			 * (wmax-cwnd) * (srtt>>3 / HZ) / c * 2^(3*bictcp_HZ)
 			 */
-			ca->bic_K = cubic_root(cube_factor
+			ca->cubic_K = cubic_root(cube_factor
 					       * (ca->last_max_cwnd - cwnd));
-			ca->bic_origin_point = ca->last_max_cwnd;
+			ca->cubic_origin_point = ca->last_max_cwnd;
 		}
 	}
 
@@ -236,27 +244,27 @@ static inline void tcp_cubic_update(struct bictcp *ca, u32_t cwnd, u32_t acked)
 	 * if the cwnd < 1 million packets !!!
 	 */
 
-	t = (s32_t)(sys_now() - ca->epoch_start);
+	t = (s32_t)(now - ca->epoch_start);
 	t += ca->delay_min;
 	/* change the unit from HZ to bictcp_HZ */
-	t <<= BICTCP_HZ;
+	t <<= CUBICTCP_HZ;
 	t /= HZ;
 
-	if (t < ca->bic_K)		/* t - K */
-		offs = ca->bic_K - t;
+	if (t < ca->cubic_K)		/* t - K */
+		offs = ca->cubic_K - t;
 	else
-		offs = t - ca->bic_K;
+		offs = t - ca->cubic_K;
 
 	/* c/rtt * (t-K)^3 */
-	delta = (cube_rtt_scale * offs * offs * offs) >> (10+3*BICTCP_HZ);
-	if (t < ca->bic_K)                            /* below origin*/
-		bic_target = ca->bic_origin_point - delta;
+	delta = (cube_rtt_scale * offs * offs * offs) >> (10+3*CUBICTCP_HZ);
+	if (t < ca->cubic_K)                            /* below origin*/
+		cubic_target = ca->cubic_origin_point - delta;
 	else                                          /* above origin*/
-		bic_target = ca->bic_origin_point + delta;
+		cubic_target = ca->cubic_origin_point + delta;
 
 	/* cubic function - calc bictcp_cnt*/
-	if (bic_target > cwnd) {
-		ca->cnt = cwnd / (bic_target - cwnd);
+	if (cubic_target > cwnd) {
+		ca->cnt = cwnd / (cubic_target - cwnd);
 	} else {
 		ca->cnt = 100 * cwnd;              /* very small increment*/
 	}
@@ -307,7 +315,7 @@ static u32_t tcp_cubic_slow_start(struct tcp_pcb *pcb, u32_t acked)
 
 static void tcp_cubic_cong_avoid(struct tcp_pcb *pcb, u32_t acked)
 {
-	struct bictcp *ca = (struct bictcp *)pcb->tcp_congestion_priv;
+	struct cubictcp *ca = (struct cubictcp *)pcb->tcp_congestion_priv;
 	ca->mss = pcb->mss;
 
 	 if (!pcb->is_cwnd_limited)
@@ -325,35 +333,27 @@ static void tcp_cubic_cong_avoid(struct tcp_pcb *pcb, u32_t acked)
 /* Slow start threshold is half the congestion window (min 2) */
 static tcpwnd_size_t tcp_cubic_ssthresh(struct tcp_pcb *pcb)
 {
-  struct bictcp *ca = (struct bictcp *)pcb->tcp_congestion_priv;
+  struct cubictcp *ca = (struct cubictcp *)pcb->tcp_congestion_priv;
 	u32_t cwnd = pcb->cwnd / pcb->mss; /* convert cwnd in byte to cwnd in segment*/
 
   ca->epoch_start = 0;	/* end of epoch */
 
   if (cwnd < ca->last_max_cwnd && fast_convergence)
-		ca->last_max_cwnd = (cwnd * (BICTCP_BETA_SCALE + beta))
-			/ (2 * BICTCP_BETA_SCALE);
+		ca->last_max_cwnd = (cwnd * (CUBICTCP_BETA_SCALE + beta))
+			/ (2 * CUBICTCP_BETA_SCALE);
 	else
 		ca->last_max_cwnd = cwnd;
 
-	return LWIP_MAX((cwnd * beta) / BICTCP_BETA_SCALE, 2) * pcb->mss;
-}
-
-static void tcp_cubic_state_update(struct tcp_pcb *pcb, u8_t new_state)
-{
-	if (new_state == TCP_CA_Loss) {
-		bictcp_reset((struct bictcp *)pcb->tcp_congestion_priv);
-		bictcp_hystart_reset(pcb);
-	}
+	return LWIP_MAX((cwnd * beta) / CUBICTCP_BETA_SCALE, 2) * pcb->mss;
 }
 
 static void hystart_update(struct tcp_pcb *pcb, u32_t delay)
 {
-	struct bictcp *ca = (struct bictcp *)pcb->tcp_congestion_priv;
+	struct cubictcp *ca = (struct cubictcp *)pcb->tcp_congestion_priv;
 	u32_t threshold;
 
 	if (TCP_SEQ_GT(pcb->lastack + 1, ca->end_seq))
-		bictcp_hystart_reset(pcb);
+		cubictcp_hystart_reset(pcb);
 
 	if (hystart_detect & HYSTART_ACK_TRAIN) {
 		u32_t now = pcb->lacktime;
@@ -389,7 +389,7 @@ static void hystart_update(struct tcp_pcb *pcb, u32_t delay)
 
 static void tcp_cubic_acked(struct tcp_pcb *pcb, u32_t rtt_ms)
 {
-	struct bictcp *ca = (struct bictcp *)pcb->tcp_congestion_priv;
+	struct cubictcp *ca = (struct cubictcp *)pcb->tcp_congestion_priv;
 	u32_t delay;
 
 	/* Discard delay samples right after fast recovery */
@@ -413,7 +413,6 @@ static void tcp_cubic_acked(struct tcp_pcb *pcb, u32_t rtt_ms)
 struct tcp_congestion_ops tcp_ca_cubic = {
 	tcp_cubic_ssthresh,
 	tcp_cubic_cong_avoid,
-  tcp_cubic_state_update,
   tcp_cubic_cwnd_event,
 	tcp_cubic_acked,
   "cubic",

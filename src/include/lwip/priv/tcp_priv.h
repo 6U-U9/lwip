@@ -57,15 +57,6 @@ extern "C" {
 
 /* Functions for interfacing with TCP: */
 
-/* Values for tcpi_state.  */
-enum tcp_ca_state
-{
-  TCP_CA_Open = 0,
-  TCP_CA_Disorder = 1,
-  TCP_CA_CWR = 2,
-  TCP_CA_Recovery = 3,
-  TCP_CA_Loss = 4
-};
 /* Events passed to congestion control interface */
 enum tcp_ca_event {
 	CA_EVENT_TX_START,	/* first transmit when no packets in flight */
@@ -78,10 +69,6 @@ enum tcp_ca_event {
 #define tcp_in_slow_start(pcb) (pcb->cwnd < pcb->ssthresh)
 
 void tcp_cong_avoid_ai(struct tcp_pcb *pcb, u32_t w, u32_t acked);
-u32_t tcp_reno_slow_start(struct tcp_pcb *pcb, u32_t acked);
-tcpwnd_size_t tcp_reno_ssthresh(struct tcp_pcb *pcb);
-void tcp_reno_cong_avoid(struct tcp_pcb *pcb, u32_t acked);
-u32_t tcp_slow_start(struct tcp_pcb *pcb, u32_t acked);
 
 /* Lower layer interface to TCP: */
 void             tcp_init    (void);  /* Initialize this module. */

@@ -8,7 +8,7 @@
 /* This is Jacobson's slow start and congestion avoidance.
  * SIGCOMM '88, p. 328.
  */
-u32_t tcp_reno_slow_start(struct tcp_pcb *pcb, u32_t acked)
+static u32_t tcp_reno_slow_start(struct tcp_pcb *pcb, u32_t acked)
 {
 	/* u32_t delta = LWIP_MIN(acked, (u32_t)pcb->ssthresh - pcb->cwnd);
 
@@ -22,7 +22,7 @@ u32_t tcp_reno_slow_start(struct tcp_pcb *pcb, u32_t acked)
 	return 0;
 }
 
-void tcp_reno_cong_avoid(struct tcp_pcb *pcb, u32_t acked)
+static void tcp_reno_cong_avoid(struct tcp_pcb *pcb, u32_t acked)
 {
 	/* In "safe" area, increase. */
 	if (tcp_in_slow_start(pcb)) {
@@ -34,7 +34,7 @@ void tcp_reno_cong_avoid(struct tcp_pcb *pcb, u32_t acked)
 }
 
 /* Slow start threshold is half the congestion window (min 2) */
-tcpwnd_size_t tcp_reno_ssthresh(struct tcp_pcb *pcb)
+static tcpwnd_size_t tcp_reno_ssthresh(struct tcp_pcb *pcb)
 {
 	return LWIP_MAX(pcb->cwnd >> 1U, 2 * pcb->mss);
 }
@@ -44,7 +44,6 @@ struct tcp_congestion_ops tcp_ca_reno = {
 	tcp_reno_cong_avoid,
   NULL,
   NULL,
-	NULL,
   "reno",
   NULL
 };

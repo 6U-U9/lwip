@@ -1306,8 +1306,8 @@ tcp_slowtmr_start:
             } */
             pcb->ssthresh = pcb->cong_ops->ssthresh(pcb);
             pcb->cwnd = pcb->mss;
-            if (pcb->cong_ops->set_state != NULL) {
-              pcb->cong_ops->set_state(pcb, TCP_CA_Loss);
+            if (pcb->cong_ops->cwnd_event != NULL) {
+              pcb->cong_ops->cwnd_event(pcb, CA_EVENT_LOSS);
             }
             LWIP_DEBUGF(TCP_CWND_DEBUG, ("tcp_slowtmr: cwnd %"TCPWNDSIZE_F
                                          " ssthresh %"TCPWNDSIZE_F"\n",

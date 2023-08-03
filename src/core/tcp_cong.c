@@ -9,20 +9,6 @@ void tcp_init_congestion_control(struct tcp_pcb *pcb)
 	    pcb->cong_ops->init(pcb);
 } */
 
-u32_t tcp_slow_start(struct tcp_pcb *pcb, u32_t acked)
-{
-	/* u32_t delta = LWIP_MIN(acked, (u32_t)pcb->ssthresh - pcb->cwnd);
-
-	acked -= delta; */
-	u32_t num_seg = (pcb->flags & TF_RTO) ? 1 : 2;
-  acked = LWIP_MIN(acked, num_seg * pcb->mss);
-	TCP_WND_INC(pcb->cwnd, acked);
-  LWIP_DEBUGF(TCP_CWND_DEBUG, ("tcp_receive: slow start cwnd %"TCPWNDSIZE_F"\n", pcb->cwnd));
-
-	/* return acked; */
-	return 0;
-}
-
 /* In theory this is tp->snd_cwnd += 1 / tp->snd_cwnd (or alternative w),
  * for every packet that was ACKed.
  */

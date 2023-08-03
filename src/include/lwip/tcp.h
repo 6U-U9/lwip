@@ -198,9 +198,6 @@ struct tcp_congestion_ops {
 	/* do new cwnd calculation (required) */
 	void (*cong_avoid)(struct tcp_pcb *pcb, u32_t acked);
 
-	/* call before changing ca_state (optional) */
-	void (*set_state)(struct tcp_pcb *pcb, u8_t new_state);
-
 	/* call when cwnd event occurs (optional) */
 	 void (*cwnd_event)(struct tcp_pcb *pcb, u8_t event);
 
